@@ -1,0 +1,15 @@
+PSF for case 60 in band 105 is 1.47 (0.07)  in pixels
+PSF for case 60 in band 125 is 1.49 (0.07)  in pixels
+PSF for case 60 in band 140 is 1.55 (0.1)  in pixels
+PSF for case 60 in band 160 is 1.56 (0.07)  in pixels
+PSF for case 60 in band 435 is 0.78 (0.02)  in pixels
+PSF for case 60 in band 606 is 0.95 (0.09)  in pixels
+PSF for case 60 in band 775 is 0.87 (0.05)  in pixels
+PSF for case 60 in band 814 is 0.91 (0.1)  in pixels
+PSF for case 60 in band 850 is 0.85 (0.02)  in pixels
+
+
+PSF for case 30 in band 606 is 1.8 (0.24)  in pixels
+PSF for case 30 in band 775 is 1.6 (0.15)  in pixels
+PSF for case 30 in band 814 is 1.65 (0.13)  in pixels
+PSF for case 30 in band 850 is 1.51 (0.06)  in pixels
