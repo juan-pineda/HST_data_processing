@@ -1,7 +1,9 @@
 from main import *
 
 outdir = './data_example'
-galaxies = ["3","15","37","912","919","937","943","982","1002"]
+#galaxies = ["3","15","37","912","919","937","943","982","1002"]
+galaxies = ["1","7","13"]
+
 
 for gal in galaxies:
 
