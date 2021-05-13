@@ -32,6 +32,10 @@ def new_read_hst(gal, band, case='60'):
     """
     'case' stands for pixel size in mas, must be: '30' or '60'
     """
+    if gal == "m3":
+        gal = "3"
+    elif gal == "m943":
+        gal = "943"
     try:
          hdul = fits.open(new_folder_hst+gal+'_'+case+'mas_f'+band+"w_sci.fits")
     except:
@@ -44,6 +48,11 @@ def read_hst_weight_maps(gal, band, case='60'):
     """
     'case' stands for pixel size in mas, must be: '30' or '60'
     """
+    if gal == "m3":
+        gal = "3"
+    elif gal == "m943":
+        gal = "943"
+
     try:
          hdul = fits.open(new_folder_hst+gal+'_'+case+'mas_f'+band+"w_wht.fits")
     except:
@@ -53,6 +62,10 @@ def read_hst_weight_maps(gal, band, case='60'):
 
 # Read sky value
 def read_sky(gal, band):
+    if gal == "m3":
+        gal = "3"
+    elif gal == "m943":
+        gal = "943"
     sky = np.loadtxt(new_folder_sky+"sky_"+gal+"_"+band+".txt")
     return sky
 
