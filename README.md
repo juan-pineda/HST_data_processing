@@ -45,5 +45,9 @@ This is done by fitting gaussian profiles to 5 stars in each band, and will be
 explained in more detail somewhere else. The estimated resolutions are manually
 copied inside the file "main.py".  
 
-
+### Example
+The built in example in "example.py" has been tested and should run if you have
+the necessary libraries installed and a healthy python distribution installed.
+Make sure you can run it, you understand what it did, and explore the results 
+and the input data to confirm whether the results look as they should.
 
