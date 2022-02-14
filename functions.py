@@ -1,31 +1,38 @@
-from astropy.io import fits
-import numpy as np
-import matplotlib.pyplot as plt
-from astropy import wcs
-import scipy.interpolate
-from numpy.fft import fftshift, rfft2, irfft2
-from shutil import copyfile
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-import pickle
+# -- coding: utf-8 --
+# Author: Juan Carlos Basto Pineda
+
+""" This module is designed to deal with authomatic masks interpolated
+"""
+
 import os
 import sys
 import cv2
+import pickle
+import numpy as np
+from astropy import wcs
+import scipy.interpolate
+from astropy.io import fits
+from shutil import copyfile
 from scipy import interpolate
-
-# new_folder_hst must point to the HST data
-# format is:
-# 872_60mas_f814w_sci.fits
-# 872_60mas_f814w_wht.fits
-# 872_60mas_f850lp_sci.fits
-new_folder_hst = '/media/juan/Pesquisa/DATOS_MUSE/new_stamps/'
-
-# Folder with the measurements of the sky in the background of each image
-new_folder_sky = "./NEW_SKY/"
-
-# Here are the segmentation masks
-segmendir = '/home/juan/PROYECTOS/MUSE/Data_from_Contini/mosaics'
+import matplotlib.pyplot as plt
+from numpy.fft import fftshift, rfft2, irfft2
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
+  ####--- Manual Configurations --------------####
+  ####--- Set the paths to the source data ---####
+
+new_folder_hst = "./INPUT_DATA/new_stamps/" # HST data
+new_folder_sky = "./INPUT_DATA/NEW_SKY/" # measurements of the sky
+segmendir = "./INPUT_DATA/segment_maps/" # segmentation masks
+
+  ###--- End of manual configurations ------####
+  ###---------------------------------------####
+
+
+# NOTE:
+# The most important function here is ***enlarge_mask(gal)***
+# It is called from "main.py", and makes use of all the other functions here
 
 # Read HST image
 def new_read_hst(gal, band, case='60'):
@@ -79,23 +86,24 @@ def get_key_from_segmentation_map(gal):
 
 
 # Mask the region of the main object using the key on the central pixel
-# extra key is intended for mergers, when you want to retain two objects
+# Extra key is intended for mergers, i.e., when you want to retain two objects
 # gal = 'm3': treats galaxy 3 as a merger of two objects
 # gal = 'm943': treats galaxy 943 as a merger of two objects
 def mask_main(gal,extra_key=None):
     """
-    Reads the segmentation mask, and returns a mask to separate the MAIN OBJECT
+    Reads the segmentation mask and returns a mask to separate the MAIN OBJECT
+
     Returns:
-    mask: mask indicating the main object with TRUEs (and False elsewhere)
+    mask: mask indicating the main object with TRUE (and False elsewhere)
     header: header from the original segmentation mask (have info about coords.)
     """
     # Check if we want one these mergers, encoded with the letter 'm' in front
     if gal == 'm3':
         gal = '3'
-        extra_key = 24350
+        extra_key = 24350 # identifies the second object in the segmentation map
     elif gal == 'm943':
         gal = '943'
-        extra_key = 22951
+        extra_key = 22951 # identifies the second object in the segmentation map
 
     # Read the segmentation mask
     segmentation_mask = fits.open(segmendir+'/udf_mosaic_'+gal+'_HST_SEGMAP.fits')
@@ -105,21 +113,23 @@ def mask_main(gal,extra_key=None):
     # Get the key identifying the main object
     key = get_key_from_segmentation_map(gal)
 
-    # Check for main object (or two main objects)
+    # Check if only one main object or two main objects (for mergers)
     if extra_key:
         index = (seg_mask == key) | (seg_mask == extra_key)
     else:
         index = (seg_mask == key)
 
     mask = seg_mask.copy()
-    mask[index] = 1 # sky pixels
-    mask[~index] = 0 # sources
+    mask[index] = 1 # sky pixels (or other objects to be ignored)
+    mask[~index] = 0 # source(s)
     mask = mask.astype(bool)
     return mask, header
 
 
-# As boolean search for single key misses some pixels in the edges,
-# the maks is enlarged by dilation
+# The boolean use of a single key misses some pixels in the edges of the object,
+# so the mask is enlarged by dilation in order to not loose any flux.
+# Here we also return a version of the enlarged mask interpolated to the grid
+# of the 160-band image to have all the data in the same frame of reference. 
 def enlarge_mask(gal,extra_key=None):
     band = '160'
     hdul = new_read_hst(gal,band,case='60')
@@ -135,19 +145,25 @@ def enlarge_mask(gal,extra_key=None):
 def interpolate_mask(mask,header,hdul):
     """
     Receives the mask, its parent header, and the image
-    over which grid the mask is to mapped;
-    mask is interpolated to the nearest in the frame of
-    reference of the image
+    over whose grid the mask is to be mapped;
+    the mask is interpolated to the nearest in the frame of
+    reference of the image hdul
+
     Returns a mask of 1's (and 0's) in these new coordinates
     """
+
+    # here we do not need to oversample the data
     x,y = oversampled_positions(mask, oversampling=1)
     xx,yy = np.meshgrid(x,y)
     pixcrd = np.column_stack((np.ravel(yy),np.ravel(xx)))
+    # we are converting the pixel coordinates to WCS
     world = get_wcs_coordinates(pixcrd, header)
-    # interpolator is created in target frame of reference
+    # go from WCS to pixel coordinates in the frame of ref of the other image
     pixcrd2 = get_pixel_coordinates(world, hdul[0].header)
+    # interpolator is created in target frame of reference
+    # new points are interpolated to the mask pixel they are nearest to (1 or 0)
     interp = interpolate.NearestNDInterpolator(pixcrd2, np.ravel(mask.T).T)
-    # Let's apply the mask to the HST image
+    # Let's apply the interpolating mask to the HST positions
     x,y = oversampled_positions(hdul[0].data, oversampling=1)
     xx,yy = np.meshgrid(x,y)
     pixcrd = np.column_stack((np.ravel(yy),np.ravel(xx)))
@@ -156,14 +172,13 @@ def interpolate_mask(mask,header,hdul):
     return new_mask
 
 
-# row, col positions of a grid of pixels oversampled on top of a coarser grid
+# (row, col) positions of a grid of pixels oversampled on top of a coarser grid
 # oversample gives the factor of oversampling
 def oversampled_positions(image, oversampling):
     npix = image.shape[0]
     x = 0.5 + (1./oversampling)/2 +  np.arange(0, npix * oversampling, 1)/float(oversampling)
     npix = image.shape[1]
     y = 0.5 + (1./oversampling)/2 +  np.arange(0, npix * oversampling, 1)/float(oversampling)
-    ###
     return x, y
 
 

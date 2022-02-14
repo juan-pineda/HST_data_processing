@@ -1,11 +1,15 @@
-from astropy.io import fits
+# -- coding: utf-8 --
+# Author: Juan Carlos Basto Pineda
+
 import numpy as np
-import matplotlib.pyplot as plt
 import astropy.convolution
+from astropy.io import fits
+import matplotlib.pyplot as plt
 
 from functions import *
 
-
+# 1-sigma PSF stimated from gaussian fitting to some stars in each band
+# This were estimted for 60mas images and are given in pixel
 new_sigma_hst =  {"105":1.47,
               "125":1.49,
               "140":1.55,
@@ -24,17 +28,16 @@ def sigma_quad_diff(band):
 
 
 # Read an image and creates the low resolution version, 
-# sky-subtracted and masked
-def signal_low_resolution(gal,band,case='60'):
+# sky-subtracted and masked. 
+# There is the option to convolve with the gaussian kernel squared
+def signal_low_resolution(gal,band,case='60', kernel_square=False):
     hdul = new_read_hst(gal,band,case)
     sky = read_sky(gal,band)
     new_mask = enlarge_mask(gal)
     sigma = sigma_quad_diff(band)
     data = hdul[0].data - sky
     data = data * new_mask
-    new_mask = enlarge_mask(gal)
-    data = data * new_mask
-    data = direct_convolution(data,sigma)
+    data = direct_convolution(data,sigma,kernel_square)
     data = data * new_mask
     return data
 
@@ -48,22 +51,6 @@ def variance_low_resolution(gal,band,case='60'):
     new_mask = enlarge_mask(gal)
     variance = variance*new_mask
     return variance
-
-
-# Read an image and creates the low resolution version, 
-# sky-subtracted and masked
-def signal_kernel_square(gal,band,case='60'):
-    hdul = new_read_hst(gal,band,case)
-    sky = read_sky(gal,band)
-    new_mask = enlarge_mask(gal)
-    sigma = sigma_quad_diff(band)
-    data = hdul[0].data - sky
-    data = data * new_mask
-    new_mask = enlarge_mask(gal)
-    data = data * new_mask
-    data = direct_convolution(data,sigma,kernel_square=True)
-    data = data * new_mask
-    return data
 
 
 def direct_convolution(data,sigma,kernel_square=False):
