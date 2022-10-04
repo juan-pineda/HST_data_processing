@@ -1,8 +1,7 @@
 # -- coding: utf-8 --
 # Author: Juan Carlos Basto Pineda
 
-""" This module is designed to deal with authomatic masks interpolated
-"""
+""" Set paths / Deal with segmentation maps and create interpolated masks """ 
 
 import os
 import sys
@@ -30,14 +29,16 @@ segmendir = "./INPUT_DATA/segment_maps/" # segmentation masks
   ###---------------------------------------####
 
 
-# NOTE:
 # The most important function here is ***enlarge_mask(gal)***
-# It is called from "main.py", and makes use of all the other functions here
+# It is called from "main.py" and makes use of all the other functions here
+# Yet the code is presented in a sequence intended to ease its comprehension
 
-# Read HST image
+
+# read HST image
 def new_read_hst(gal, band, case='60'):
     """
     'case' stands for pixel size in mas, must be: '30' or '60'
+    'm3' is the same galaxy 3 (see readme)
     """
     if gal == "m3":
         gal = "3"
@@ -50,16 +51,16 @@ def new_read_hst(gal, band, case='60'):
     return hdul
 
 
-# Read weight map
+# read weight map
 def read_hst_weight_maps(gal, band, case='60'):
     """
     'case' stands for pixel size in mas, must be: '30' or '60'
+    'm3' is the same galaxy 3 (see readme)
     """
     if gal == "m3":
         gal = "3"
     elif gal == "m943":
         gal = "943"
-
     try:
          hdul = fits.open(new_folder_hst+gal+'_'+case+'mas_f'+band+"w_wht.fits")
     except:
@@ -67,8 +68,9 @@ def read_hst_weight_maps(gal, band, case='60'):
     return hdul
 
 
-# Read sky value
+# read sky value (precomputed)
 def read_sky(gal, band):
+    """ 'm3' is the same galaxy 3 (see readme) """
     if gal == "m3":
         gal = "3"
     elif gal == "m943":
@@ -77,7 +79,8 @@ def read_sky(gal, band):
     return sky
 
 
-# It gets the central pixel of the segmentation mask, marking the main object
+# gets the value of the central pixel in the segmentation mask
+# pixels of the central object are identically labeled (except the border ones)
 def get_key_from_segmentation_map(gal):
     segmentation_mask = fits.open(segmendir+'/udf_mosaic_'+gal+'_HST_SEGMAP.fits')
     N,M = segmentation_mask[1].data.shape
@@ -85,19 +88,28 @@ def get_key_from_segmentation_map(gal):
     return np.int(key)
 
 
-# Mask the region of the main object using the key on the central pixel
-# Extra key is intended for mergers, i.e., when you want to retain two objects
-# gal = 'm3': treats galaxy 3 as a merger of two objects
-# gal = 'm943': treats galaxy 943 as a merger of two objects
-def mask_main(gal,extra_key=None):
+# mask the region of the main object using the key on the central pixel
+# the mask can also be configured to extend over two merging objects
+def mask_main(gal, extra_key=None):
     """
     Reads the segmentation mask and returns a mask to separate the MAIN OBJECT
+    ALTERNATIVELY, you can mask the TWO OBJECTS when there is a merger.
+
+    For mergers use the parameter "extra_key", which you should set manually in
+    the body of this function. You sould also define a custom name for the
+    merger, for instance:
+    gal = '3'   : masks only the main object based on the central pixel
+    gal = 'm3'  : treats galaxy 3 as a merger of two objects
 
     Returns:
-    mask: mask indicating the main object with TRUE (and False elsewhere)
-    header: header from the original segmentation mask (have info about coords.)
+        a mask tagging pixels of the main object as TRUE (False elsewhere)
+        the header of original segmentation mask (have info about coords.)
+
+    NOTES:
+        the mask returned is in the same grid of the segmentation maps
     """
-    # Check if we want one these mergers, encoded with the letter 'm' in front
+
+    # Check if we want one these mergers encoded with the letter 'm' in front
     if gal == 'm3':
         gal = '3'
         extra_key = 24350 # identifies the second object in the segmentation map
@@ -127,35 +139,36 @@ def mask_main(gal,extra_key=None):
 
 
 # The boolean use of a single key misses some pixels in the edges of the object,
-# so the mask is enlarged by dilation in order to not loose any flux.
+# so, the mask is enlarged by dilation in order to not loose any flux.
 # Here we also return a version of the enlarged mask interpolated to the grid
-# of the 160-band image to have all the data in the same frame of reference. 
-def enlarge_mask(gal,extra_key=None):
+# of the 160-band image to have all the data in the right frame of reference.
+def enlarge_mask(gal, extra_key=None):
     band = '160'
-    hdul = new_read_hst(gal,band,case='60')
-    mask, header = mask_main(gal,extra_key)
+    hdul = new_read_hst(gal, band, case='60')
+    # this mask is in the grid of the segmentation maps
+    mask, header = mask_main(gal, extra_key)
     # New creation of the mask including the dilation
     n = 3
     kernel = np.ones((n,n),np.uint8)
-    mdil = cv2.dilate(mask.astype(float),kernel,iterations =1)
-    new_mask = interpolate_mask(mdil,header,hdul)
+    mdil = cv2.dilate(mask.astype(float), kernel, iterations =1)
+    # version of the mask mapped to the grid of the images
+    new_mask = interpolate_mask(mdil, header, hdul)
     return new_mask
 
 
-def interpolate_mask(mask,header,hdul):
+def interpolate_mask(mask, header, hdul):
     """
-    Receives the mask, its parent header, and the image
-    over whose grid the mask is to be mapped;
-    the mask is interpolated to the nearest in the frame of
-    reference of the image hdul
+    Maps a mask from a native grid of pixels to a different one
 
-    Returns a mask of 1's (and 0's) in these new coordinates
+    Receives the mask, its parent header, and the data over whose grid the
+    mask is to be mapped, and uses interpolated-to-the-nearest.
+    Returns a mask of 1's (and 0's) in the new grid of coordinates.
     """
 
     # here we do not need to oversample the data
     x,y = oversampled_positions(mask, oversampling=1)
-    xx,yy = np.meshgrid(x,y)
-    pixcrd = np.column_stack((np.ravel(yy),np.ravel(xx)))
+    xx,yy = np.meshgrid(x, y)
+    pixcrd = np.column_stack((np.ravel(yy), np.ravel(xx)))
     # we are converting the pixel coordinates to WCS
     world = get_wcs_coordinates(pixcrd, header)
     # go from WCS to pixel coordinates in the frame of ref of the other image
@@ -165,15 +178,16 @@ def interpolate_mask(mask,header,hdul):
     interp = interpolate.NearestNDInterpolator(pixcrd2, np.ravel(mask.T).T)
     # Let's apply the interpolating mask to the HST positions
     x,y = oversampled_positions(hdul[0].data, oversampling=1)
-    xx,yy = np.meshgrid(x,y)
-    pixcrd = np.column_stack((np.ravel(yy),np.ravel(xx)))
-    new_mask = interp(pixcrd[:,0],pixcrd[:,1]).reshape(xx.shape).T
+    xx,yy = np.meshgrid(x, y)
+    pixcrd = np.column_stack((np.ravel(yy), np.ravel(xx)))
+    new_mask = interp(pixcrd[:,0], pixcrd[:,1]).reshape(xx.shape).T
     new_mask = new_mask.astype(float)
+
     return new_mask
 
 
-# (row, col) positions of a grid of pixels oversampled on top of a coarser grid
-# oversample gives the factor of oversampling
+# (row, col) positions of a grid of oversampled pixels on top of a coarser grid
+# 'oversample' gives the factor of oversampling
 def oversampled_positions(image, oversampling):
     npix = image.shape[0]
     x = 0.5 + (1./oversampling)/2 +  np.arange(0, npix * oversampling, 1)/float(oversampling)
